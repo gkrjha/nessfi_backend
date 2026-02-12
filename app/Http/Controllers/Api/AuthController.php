@@ -3,178 +3,105 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\LoginRequest;
+use App\Http\Requests\RegisterRequest;
+use App\Http\Requests\ResendVerificationRequest;
+use App\Http\Requests\VerifyEmailRequest;
+use App\Http\Resources\AuthResource;
 use App\Models\User;
-use App\Notifications\RegistrationNotification;
+use App\Traits\ApiResponse;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\RateLimiter;
-use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
 {
-    public function register(Request $request)
+    use ApiResponse;
+
+    public function register(RegisterRequest $request)
     {
-
-        $request->validate([
-            'name' => 'required|string|max:255',
-            'email' => 'required|email|unique:users',
-            'password' => 'required|string|min:6',
-        ]);
-
-
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role'=>'user'
+            'role' => 'user'
         ]);
 
+        event(new Registered($user));
 
-        $verificationCode = random_int(100000, 999999);
-
-        $user->email_verification_code = $verificationCode;
-        $user->email_verification_expires_at = now()->addMinutes(10);
-        $user->save();
-
-        $user->notify(new RegistrationNotification($user, $verificationCode));
-
-        return response()->json([
-            'message' => 'Registration successful! A verification code has been sent to your email.',
-        ]);
+        return (new AuthResource($user, null, 'Registration successful! A verification link has been sent to your email.'))
+            ->response()
+            ->setStatusCode(201);
     }
-    public function login(Request $request)
-    {
-        $request->validate([
-            'email' => 'required|email',
-            'password' => 'required|string',
-        ]);
 
+    public function login(LoginRequest $request)
+    {
+        
         $key = 'login-attempts:' . $request->ip();
         
         if (RateLimiter::tooManyAttempts($key, 5)) {
             $seconds = RateLimiter::availableIn($key);
-            return response()->json([
-                'message' => "Too many login attempts. Please try again in {$seconds} seconds."
-            ], 429);
+            return $this->errorResponse(
+                "Too many login attempts. Please try again in {$seconds} seconds.",
+                429
+            );
         }
 
-        $credentials = $request->only('email', 'password');
+        
 
-        if (!Auth::attempt($credentials)) {
+        if (!Auth::attempt($request->only('email', 'password'))) {
             RateLimiter::hit($key, 60);
-            
-            return response()->json([
-                'message' => 'Invalid email or password.'
-            ], 401);
+            return $this->unauthorizedResponse('Invalid email or password.');
         }
 
         RateLimiter::clear($key);
 
-        $user = auth()->user();
+        $user = Auth::user();
 
-        if (!$user->email_verified) {
-            return response()->json([
-                'message' => 'Email not verified. Please check your inbox for the verification code.'
-            ], 403);
+        if (!$user->hasVerifiedEmail()) {
+            return $this->forbiddenResponse('Email not verified. Please verify your email first.');
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
-
-        return response()->json([
-            'access_token' => $token,
-            'token_type' => 'Bearer',
-            'user' => $user
-        ]);
+dd("...........",$request);
+        return new AuthResource($user, $token, 'Login successful');
     }
 
-
-    public function verifyEmail(Request $request)
+    public function verifyEmail(VerifyEmailRequest $request)
     {
-        $request->validate([
-            'email' => 'required|email',
-            'code' => 'required|digits:6',
-        ]);
-
         $user = User::where('email', $request->email)->first();
 
-        if (!$user) {
-            return response()->json(['message' => 'User not found.'], 404);
-        }
-
-        if ($user->email_verified) {
-            $user->email_verification_code = null;
-            $user->email_verification_expires_at = null;
-            $user->save();
-            
+        if ($user->hasVerifiedEmail()) {
             $token = $user->createToken('auth_token')->plainTextToken;
-            
-            return response()->json([
-                'message' => 'Email already verified.',
-                'access_token' => $token,
-                'token_type' => 'Bearer',
-                'user' => $user
-            ]);
+            return new AuthResource($user, $token, 'Email already verified.');
         }
 
-        if ($user->email_verification_code !== $request->code) {
-            return response()->json(['message' => 'Invalid verification code.'], 422);
-        }
-
-        if ($user->email_verification_expires_at->isPast()) {
-            return response()->json(['message' => 'Verification code has expired.'], 422);
-        }
-
-        $user->email_verified = true;
-        $user->email_verification_code = null;
-        $user->email_verification_expires_at = null;
-        $user->save();
+        $user->markEmailAsVerified();
 
         $token = $user->createToken('auth_token')->plainTextToken;
 
-        return response()->json([
-            'message' => 'Email verified successfully!',
-            'access_token' => $token,
-            'token_type' => 'Bearer',
-            'user' => $user
-        ]);
+        return new AuthResource($user, $token, 'Email verified successfully!');
     }
 
-    public function resendVerificationCode(Request $request)
+    public function resendVerification(ResendVerificationRequest $request)
     {
-        $request->validate([
-            'email' => 'required|email',
-        ]);
-
         $user = User::where('email', $request->email)->first();
 
-        if (!$user) {
-            return response()->json(['message' => 'User not found.'], 404);
+        if ($user->hasVerifiedEmail()) {
+            return $this->errorResponse('Email already verified.', 400);
         }
 
-        if ($user->email_verified) {
-            return response()->json(['message' => 'Email already verified.'], 400);
-        }
+        $user->sendEmailVerificationNotification();
 
-        $verificationCode = random_int(100000, 999999);
-
-        $user->email_verification_code = $verificationCode;
-        $user->email_verification_expires_at = now()->addMinutes(10);
-        $user->save();
-
-        $user->notify(new RegistrationNotification($user, $verificationCode));
-
-        return response()->json([
-            'message' => 'Verification code has been resent to your email.',
-        ]);
+        return $this->successResponse(null, 'Verification link has been sent to your email.');
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
-        auth()->user()->tokens()->delete();
+        $request->user()->tokens()->delete();
 
-        return response()->json([
-            'message' => 'Successfully logged out'
-        ]);
+        return $this->successResponse(null, 'Successfully logged out');
     }
 }

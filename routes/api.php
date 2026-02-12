@@ -11,5 +11,5 @@ Route::get('/user', function (Request $request) {
 Route::post('/user-register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/verify-email', [AuthController::class, 'verifyEmail']);
-Route::post('/resend-verification', [AuthController::class, 'resendVerificationCode']);
+Route::post('/resend-verification', [AuthController::class, 'resendVerification']);
 Route::post('/logout', [AuthController::class, 'logout'])->middleware('auth:sanctum');
