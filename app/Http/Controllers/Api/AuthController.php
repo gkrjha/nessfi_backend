@@ -38,9 +38,9 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request)
     {
-        
+
         $key = 'login-attempts:' . $request->ip();
-        
+
         if (RateLimiter::tooManyAttempts($key, 5)) {
             $seconds = RateLimiter::availableIn($key);
             return $this->errorResponse(
@@ -49,7 +49,7 @@ class AuthController extends Controller
             );
         }
 
-        
+
 
         if (!Auth::attempt($request->only('email', 'password'))) {
             RateLimiter::hit($key, 60);
@@ -65,7 +65,7 @@ class AuthController extends Controller
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;
-dd("...........",$request);
+
         return new AuthResource($user, $token, 'Login successful');
     }
 
