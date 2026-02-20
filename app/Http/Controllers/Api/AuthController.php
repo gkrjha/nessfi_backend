@@ -37,7 +37,6 @@ class AuthController extends Controller
 
     public function login(LoginRequest $request)
     {
-        // dd($request);
 
         if (!Auth::attempt($request->only('email', 'password'))) {
             return $this->unauthorizedResponse('Invalid email or password.');

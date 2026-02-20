@@ -13,7 +13,6 @@ class EmployeeSeeder extends Seeder
      */
     public function run(): void
     {
-        // Create sample employees
         $employees = [
             [
                 'name' => 'John Doe',

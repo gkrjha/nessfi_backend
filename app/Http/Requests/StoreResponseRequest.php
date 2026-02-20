@@ -14,6 +14,16 @@ class StoreResponseRequest extends FormRequest
 
     public function rules(): array
     {
+        if ($this->has('responses')) {
+            return [
+                'responses' => 'required|array|min:1',
+                'responses.*.question_id' => 'required|exists:questions,id',
+                'responses.*.selected_options' => 'nullable|array',
+                'responses.*.selected_options.*' => 'exists:options,id',
+                'responses.*.text_response' => 'nullable|string',
+            ];
+        }
+
         $question = Question::find($this->question_id);
 
         $rules = [

@@ -16,13 +16,30 @@ class ResponseController extends Controller
 
     public function index()
     {
-        $responses = Response::with(['user', 'question', 'option'])
-            ->where('user_id', auth()->id())
+        $userId = auth()->id();
+
+        $responses = Response::with(['question.section', 'option'])
+            ->where('user_id', $userId)
+            ->orderBy('created_at', 'desc')
             ->get();
 
+        $submissions = $responses->groupBy(function ($response) {
+            return $response->created_at->format('Y-m');
+        })->map(function ($monthResponses, $monthKey) use ($userId) {
+            $firstResponse = $monthResponses->first();
+            return [
+                'id' => $monthKey,
+                'user_id' => $userId,
+                'submitted_at' => $firstResponse->created_at->toISOString(),
+                'month' => $firstResponse->created_at->format('F Y'),
+                'responses_count' => $monthResponses->count(),
+                'responses' => ResponseResource::collection($monthResponses),
+            ];
+        })->values();
+
         return $this->successResponse(
-            ResponseResource::collection($responses),
-            'Responses retrieved successfully'
+            $submissions,
+            'Submissions retrieved successfully'
         );
     }
 
@@ -31,10 +48,56 @@ class ResponseController extends Controller
         try {
             DB::beginTransaction();
 
-            $question = Question::findOrFail($request->question_id);
             $userId = auth()->id();
 
-            // Handle checkbox multiple - multiple responses
+            $hasSubmittedThisMonth = Response::where('user_id', $userId)
+                ->whereYear('created_at', now()->year)
+                ->whereMonth('created_at', now()->month)
+                ->exists();
+
+            if ($hasSubmittedThisMonth) {
+                return $this->errorResponse(
+                    'You have already submitted an assessment this month. Please try again next month.',
+                    403
+                );
+            }
+
+            $allResponses = [];
+
+            if ($request->has('responses')) {
+                foreach ($request->responses as $responseData) {
+                    $question = Question::findOrFail($responseData['question_id']);
+
+                    if (!empty($responseData['selected_options'])) {
+                        foreach ($responseData['selected_options'] as $optionId) {
+                            $allResponses[] = Response::create([
+                                'user_id' => $userId,
+                                'question_id' => $responseData['question_id'],
+                                'option_id' => $optionId,
+                                'response_text' => $responseData['text_response'] ?? null,
+                            ]);
+                        }
+                    } else {
+                        $allResponses[] = Response::create([
+                            'user_id' => $userId,
+                            'question_id' => $responseData['question_id'],
+                            'option_id' => null,
+                            'response_text' => $responseData['text_response'] ?? null,
+                        ]);
+                    }
+                }
+
+                DB::commit();
+
+                return $this->successResponse(
+                    ResponseResource::collection($allResponses),
+                    'Assessment submitted successfully',
+                    201
+                );
+            }
+
+            $question = Question::findOrFail($request->question_id);
+
             if (in_array($question->question_type, ['checkbox_multiple', 'checkbox_textarea'])) {
                 $responses = [];
                 foreach ($request->option_ids as $optionId) {
@@ -55,7 +118,6 @@ class ResponseController extends Controller
                 );
             }
 
-            // Handle single response (MCQ, text, etc.)
             $response = Response::create([
                 'user_id' => $userId,
                 'question_id' => $request->question_id,
@@ -72,7 +134,7 @@ class ResponseController extends Controller
             );
         } catch (\Exception $e) {
             DB::rollBack();
-            return $this->serverErrorResponse('Failed to submit response');
+            return $this->serverErrorResponse('Failed to submit response: ' . $e->getMessage());
         }
     }
 
@@ -102,25 +164,85 @@ class ResponseController extends Controller
         );
     }
 
-    // Admin methods
+    public function canSubmitThisMonth()
+    {
+        $userId = auth()->id();
+
+        $hasSubmittedThisMonth = Response::where('user_id', $userId)
+            ->whereYear('created_at', now()->year)
+            ->whereMonth('created_at', now()->month)
+            ->exists();
+
+        $lastSubmission = Response::where('user_id', $userId)
+            ->latest('created_at')
+            ->first();
+
+        return $this->successResponse([
+            'can_submit' => !$hasSubmittedThisMonth,
+            'has_submitted_this_month' => $hasSubmittedThisMonth,
+            'last_submission_date' => $lastSubmission ? $lastSubmission->created_at->format('Y-m-d H:i:s') : null,
+            'next_available_date' => $hasSubmittedThisMonth ? now()->addMonth()->startOfMonth()->format('Y-m-d') : null,
+        ]);
+    }
+
     public function getEmployees()
     {
         $employees = \App\Models\User::where('role', 'employee')
-            ->withCount('responses')
             ->orderBy('name')
             ->get()
             ->map(function ($user) {
+                $uniqueMonths = DB::table('responses')
+                    ->where('user_id', $user->id)
+                    ->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month')
+                    ->groupBy('month')
+                    ->get()
+                    ->count();
+
                 return [
                     'id' => $user->id,
                     'name' => $user->name,
                     'email' => $user->email,
-                    'assessmentCount' => $user->responses_count,
+                    'assessmentCount' => $uniqueMonths,
                 ];
             });
 
         return $this->successResponse(
             $employees,
             'Employees retrieved successfully'
+        );
+    }
+
+    public function getCurrentMonthEmployees()
+    {
+        $currentYear = now()->year;
+        $currentMonth = now()->month;
+
+        $employees = \App\Models\User::where('role', 'employee')
+            ->whereHas('responses', function ($query) use ($currentYear, $currentMonth) {
+                $query->whereYear('created_at', $currentYear)
+                    ->whereMonth('created_at', $currentMonth);
+            })
+            ->orderBy('name')
+            ->get()
+            ->map(function ($user) {
+                $uniqueMonths = DB::table('responses')
+                    ->where('user_id', $user->id)
+                    ->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month')
+                    ->groupBy('month')
+                    ->get()
+                    ->count();
+
+                return [
+                    'id' => $user->id,
+                    'name' => $user->name,
+                    'email' => $user->email,
+                    'assessmentCount' => $uniqueMonths,
+                ];
+            });
+
+        return $this->successResponse(
+            $employees,
+            'Current month employees retrieved successfully'
         );
     }
 
@@ -134,11 +256,26 @@ class ResponseController extends Controller
 
         $responses = Response::with(['question.section', 'option'])
             ->where('user_id', $userId)
+            ->orderBy('created_at', 'desc')
             ->get();
 
+        $submissions = $responses->groupBy(function ($response) {
+            return $response->created_at->format('Y-m');
+        })->map(function ($monthResponses, $monthKey) use ($userId) {
+            $firstResponse = $monthResponses->first();
+            return [
+                'id' => $monthKey,
+                'user_id' => $userId,
+                'submitted_at' => $firstResponse->created_at->toISOString(),
+                'month' => $firstResponse->created_at->format('F Y'),
+                'responses_count' => $monthResponses->count(),
+                'responses' => ResponseResource::collection($monthResponses),
+            ];
+        })->values();
+
         return $this->successResponse(
-            ResponseResource::collection($responses),
-            'Employee responses retrieved successfully'
+            $submissions,
+            'Employee submissions retrieved successfully'
         );
     }
 }
