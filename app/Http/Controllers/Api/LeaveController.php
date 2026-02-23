@@ -34,16 +34,14 @@ class LeaveController extends Controller
         $request->validate([
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
-            'leave_type' => 'required|in:sick,casual,annual,unpaid',
             'subject' => 'required|string|max:255',
-            'reason' => 'nullable|string',
+            'reason' => 'required|string',
         ]);
 
         $leave = Leave::create([
             'user_id' => auth()->id(),
             'start_date' => $request->start_date,
             'end_date' => $request->end_date,
-            'leave_type' => $request->leave_type,
             'subject' => $request->subject,
             'reason' => $request->reason,
             'status' => 'pending',
@@ -67,12 +65,11 @@ class LeaveController extends Controller
         $request->validate([
             'start_date' => 'required|date',
             'end_date' => 'required|date|after_or_equal:start_date',
-            'leave_type' => 'required|in:sick,casual,annual,unpaid',
             'subject' => 'required|string|max:255',
-            'reason' => 'nullable|string',
+            'reason' => 'required|string',
         ]);
 
-        $leave->update($request->only(['start_date', 'end_date', 'leave_type', 'subject', 'reason']));
+        $leave->update($request->only(['start_date', 'end_date', 'subject', 'reason']));
         $leave->load(['user', 'approver']);
 
         return $this->successResponse($leave, 'Leave request updated successfully');

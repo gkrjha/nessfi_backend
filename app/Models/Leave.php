@@ -13,7 +13,6 @@ class Leave extends Model
         'user_id',
         'start_date',
         'end_date',
-        'leave_type',
         'subject',
         'reason',
         'status',
