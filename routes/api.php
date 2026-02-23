@@ -4,6 +4,8 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\SectionController;
 use App\Http\Controllers\Api\QuestionController;
 use App\Http\Controllers\Api\ResponseController;
+use App\Http\Controllers\Api\HolidayController;
+use App\Http\Controllers\Api\LeaveController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -33,9 +35,23 @@ Route::middleware(['auth:sanctum'])->group(function () {
     Route::get('/responses/{response}', [ResponseController::class, 'show']);
     Route::delete('/responses/{response}', [ResponseController::class, 'destroy']);
 
+    Route::get('/holidays', [HolidayController::class, 'index']);
+    
+    Route::get('/leaves', [LeaveController::class, 'index']);
+    Route::post('/leaves', [LeaveController::class, 'store']);
+    Route::put('/leaves/{leave}', [LeaveController::class, 'update']);
+    Route::delete('/leaves/{leave}', [LeaveController::class, 'destroy']);
+    Route::get('/leaves/date-range', [LeaveController::class, 'getByDateRange']);
+
     Route::middleware(['admin'])->prefix('admin')->group(function () {
         Route::get('/employees/current-month', [ResponseController::class, 'getCurrentMonthEmployees']);
         Route::get('/employees', [ResponseController::class, 'getEmployees']);
         Route::get('/employees/{userId}/responses', [ResponseController::class, 'getEmployeeResponses']);
+        
+        Route::post('/holidays', [HolidayController::class, 'store']);
+        Route::put('/holidays/{holiday}', [HolidayController::class, 'update']);
+        Route::delete('/holidays/{holiday}', [HolidayController::class, 'destroy']);
+        
+        Route::post('/leaves/{leave}/approve', [LeaveController::class, 'approve']);
     });
 });

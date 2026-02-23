@@ -185,12 +185,14 @@ class ResponseController extends Controller
         ]);
     }
 
+    // Admin methods
     public function getEmployees()
     {
         $employees = \App\Models\User::where('role', 'employee')
             ->orderBy('name')
             ->get()
             ->map(function ($user) {
+                // Count unique months where user submitted assessments
                 $uniqueMonths = DB::table('responses')
                     ->where('user_id', $user->id)
                     ->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month')
@@ -225,6 +227,7 @@ class ResponseController extends Controller
             ->orderBy('name')
             ->get()
             ->map(function ($user) {
+                // Count unique months where user submitted assessments
                 $uniqueMonths = DB::table('responses')
                     ->where('user_id', $user->id)
                     ->selectRaw('DATE_FORMAT(created_at, "%Y-%m") as month')
@@ -254,6 +257,7 @@ class ResponseController extends Controller
             return $this->errorResponse('User is not an employee', 400);
         }
 
+        // Group responses by month for assessment submissions
         $responses = Response::with(['question.section', 'option'])
             ->where('user_id', $userId)
             ->orderBy('created_at', 'desc')
