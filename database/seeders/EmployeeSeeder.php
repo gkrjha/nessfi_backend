@@ -19,6 +19,7 @@ class EmployeeSeeder extends Seeder
                 'email' => 'john@example.com',
                 'password' => Hash::make('password'),
                 'role' => 'employee',
+                'gender' => 'male',
                 'email_verified_at' => now(),
             ],
             [
@@ -26,6 +27,7 @@ class EmployeeSeeder extends Seeder
                 'email' => 'jane@example.com',
                 'password' => Hash::make('password'),
                 'role' => 'employee',
+                'gender' => 'female',
                 'email_verified_at' => now(),
             ],
             [
@@ -33,6 +35,7 @@ class EmployeeSeeder extends Seeder
                 'email' => 'mike@example.com',
                 'password' => Hash::make('password'),
                 'role' => 'employee',
+                'gender' => 'male',
                 'email_verified_at' => now(),
             ],
         ];

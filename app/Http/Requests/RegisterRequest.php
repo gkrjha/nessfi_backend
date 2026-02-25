@@ -20,6 +20,7 @@ class RegisterRequest extends FormRequest
             'email' => 'required|email|unique:users,email',
             'password' => 'required|string|min:8',
             'role' => 'nullable|in:admin,employee', // Optional, defaults to employee
+            'gender' => 'nullable|in:male,female', // Optional, defaults to male
         ];
     }
 

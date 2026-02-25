@@ -15,6 +15,7 @@ class AdminSeeder extends Seeder
             'email' => 'admin@example.com',
             'password' => Hash::make('password'),
             'role' => 'admin',
+            'gender' => 'male',
             'email_verified_at' => now(),
         ]);
 
@@ -23,6 +24,7 @@ class AdminSeeder extends Seeder
             'email' => 'employee@example.com',
             'password' => Hash::make('password'),
             'role' => 'employee',
+            'gender' => 'female',
             'email_verified_at' => now(),
         ]);
     }
