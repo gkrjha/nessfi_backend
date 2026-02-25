@@ -14,7 +14,6 @@ use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\RateLimiter;
 
 class AuthController extends Controller
 {
@@ -26,7 +25,8 @@ class AuthController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => Hash::make($request->password),
-            'role' => 'user'
+            'role' => $request->role ?? 'employee',
+            'gender' => $request->gender ?? 'male'
         ]);
 
         event(new Registered($user));
@@ -39,24 +39,9 @@ class AuthController extends Controller
     public function login(LoginRequest $request)
     {
 
-        $key = 'login-attempts:' . $request->ip();
-
-        if (RateLimiter::tooManyAttempts($key, 5)) {
-            $seconds = RateLimiter::availableIn($key);
-            return $this->errorResponse(
-                "Too many login attempts. Please try again in {$seconds} seconds.",
-                429
-            );
-        }
-
-
-
         if (!Auth::attempt($request->only('email', 'password'))) {
-            RateLimiter::hit($key, 60);
             return $this->unauthorizedResponse('Invalid email or password.');
         }
-
-        RateLimiter::clear($key);
 
         $user = Auth::user();
 
